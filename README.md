@@ -15,6 +15,13 @@ To get started with the project, follow these steps:
 4. Run the Script:
 Execute the Python script from the command line:
 ``python3 RIR-IP-Info.py``
+5. Follow the Prompts:
+   The script will prompt you for various inputs including the RIR, country code, prefix type, IP version, and whether to fetch organization information.
+
+# Usage
+1. Run the Script
+
+
 
 
 
