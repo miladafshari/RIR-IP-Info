@@ -12,14 +12,18 @@ To get started with the project, follow these steps:
 3. Install Required Python Packages:
    Ensure you have Python 3.6 or later installed, then install the dependencies using pip:
 ``pip install -r requirements.txt``
-4. Run the Script:
+# Usage
+1. Run the Script:
 Execute the Python script from the command line:
 ``python3 RIR-IP-Info.py``
-5. Follow the Prompts:
-   The script will prompt you for various inputs including the RIR, country code, prefix type, IP version, and whether to fetch organization information.
+2. Follow the Prompts:
+   The script will prompt you for the following information:
+RIR: Enter the Regional Internet Registry (e.g., RIPE NCC, AFRINIC, APNIC, LACNIC, ARIN).
+Country Code: Enter the country code (e.g., IR for Iran).
+Prefix Type: Enter the type of prefix (Allocated/Assigned PI).
+IP Version: Enter the IP version (IPv4/IPv6).
+Fetch Organization Info: Choose whether to fetch organization information (yes/no).
 
-# Usage
-1. Run the Script
 
 
 
