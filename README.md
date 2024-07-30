@@ -6,7 +6,19 @@ This project is useful for network administrators, researchers, and IT professio
 # How Users Can Get Started with the Project?
 To get started with the project, follow these steps:
 1. Clone the Repository:
-git clone https://github.com/miladafshari/RIR-IP-Info.git
+ ``git clone https://github.com/miladafshari/RIR-IP-Info.git ``
+2. Navigate to the Project Directory:
+ ``cd RIR-IP-Info``
+3. Install Required Python Packages:
+   Ensure you have Python 3.6 or later installed, then install the dependencies using pip:
+``pip install -r requirements.txt``
+4. Run the Script:
+Execute the Python script from the command line:
+``python3 RIR-IP-Info.py``
+
+
+
+
 
 
 
