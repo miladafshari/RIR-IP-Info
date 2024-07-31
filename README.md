@@ -15,8 +15,8 @@ To get started with the project, follow these steps:
 
 # Usage
 1. Run the Script:
-Execute the Python script from the command line:
-``python3 RIR-IP-Info.py``
+Execute the Python script from the command line:<br/>
+``python3 rir-ip-info.py``
 2. Follow the Prompts:<br/>
    The script will prompt you for the following information:<br/>
 RIR: Enter the Regional Internet Registry (e.g., RIPE NCC, AFRINIC, APNIC, LACNIC, ARIN).<br/>
