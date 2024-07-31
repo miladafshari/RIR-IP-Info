@@ -65,6 +65,8 @@ def main():
 
     # Prompt for RIR
     rir = input("Enter the RIR (e.g., RIPE NCC, AFRINIC, APNIC, LACNIC, ARIN): ").strip().lower()
+    if rir == 'ripe':
+        rir = 'ripe ncc'
     if rir not in rirs:
         print("Invalid RIR.")
         return
@@ -77,7 +79,7 @@ def main():
 
     # Prompt for IP prefix type
     prefix_type = input("Enter the prefix type (Allocated/Assigned PI): ").strip().lower()
-    if prefix_type not in ["allocated", "assigned pi"]:
+    if prefix_type not in ["allocated", "assigned pi", "assigned"]:
         print("Invalid prefix type.")
         return
     if prefix_type == "assigned pi":
