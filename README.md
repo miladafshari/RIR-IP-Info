@@ -1,39 +1,59 @@
-# RIR-IP-Info
+# RIR IP Info
+
+![Python Version](https://img.shields.io/badge/Python-3.8-blue.svg)
+[![GitHub issues](https://img.shields.io/github/issues/miladafshari/RIR-IP-Info.svg)](https://github.com/miladafshari/RIR-IP-Info/issues)
+[![GitHub forks](https://img.shields.io/github/forks/miladafshari/RIR-IP-Info.svg)](https://github.com/miladafshari/RIR-IP-Info/network)
+[![GitHub stars](https://img.shields.io/github/stars/miladafshari/RIR-IP-Info.svg)](https://github.com/miladafshari/RIR-IP-Info/stargazers)
+
+## A network information extractor from RIR
+
 This project provides a Python script to process IP ranges from various Regional Internet Registries (RIRs). It allows you to fetch and display IP Prefixes (IPv4, IPv6) and, optionally, organization information associated with these IP ranges. The script supports multiple RIRs, including RIPE NCC, AFRINIC, APNIC, LACNIC, and ARIN.
 This project is useful for network administrators, researchers, and IT professionals who need to analyze and manage IP address allocations across different regions.
 
-# How Users Can Get Started with the Project?
+## Installation
+
+### GitHub
+
 To get started with the project, follow these steps:
-1. Clone the Repository:<br/>
- ``git clone https://github.com/miladafshari/RIR-IP-Info.git``
 
-2. Navigate to the Project Directory:<br/>
- ``cd RIR-IP-Info``
+```sh
+git clone https://github.com/miladafshari/RIR-IP-Info.git
+cd RIR-IP-Info
+sudo make depends
+make install
+```
 
-3. Install Required Python Packages:
-   Ensure you have Python 3.6 or later installed, then install the dependencies using pip:<br/>
-``pip install -r requirements.txt``
+## Usage
 
-# Usage
-1. Run the Script: Execute the Python script from the command line:<br/>
-``python3 rir-ip-info.py``
+1. Run the Script: Execute the Python script from the command line:
 
-2. Follow the Prompts: The script will prompt you for the following information:<br/>
+```sh
+rir-ip-info -h
+```
 
-   **RIR**: Enter the Regional Internet Registry (e.g., RIPE NCC, AFRINIC, APNIC, LACNIC, ARIN).<br/>
+### Help
 
-   **Country Code:** Enter the country code (e.g., IR for Iran).<br/>
+The script will accept the following arguments:
 
-   **Prefix Type:** Enter the type of prefix (Allocated/Assigned PI).<br/>
+   `-r`/`--rir`: Enter the Regional Internet Registry (e.g., RIPE, AFRINIC, APNIC, LACNIC, ARIN).
 
-   **IP Version:** Enter the IP version (IPv4/IPv6).<br/>
+   `-c`/`--country_code` Enter the country code (e.g., IR for Iran).
 
-   **Fetch Organization Info:** Choose whether to fetch organization information (yes/no).<br/>
-   (*Please note that choosing "yes" might take longer time to fetch data.*)
+   `-t`/`--prefix_type` Enter the type of prefix (Allocated/Assigned).
 
-# Output Files
-The results will be saved to a file named according to the format:<br/>
-``results_{RIR}_{country_code}_{prefix_type}_{ip_version}_{timestamp}.txt``
+   `-v`/`--ip_version` Enter the IP version (4/6).
+
+   `-o`/`--org_info` Choose whether to fetch organization information.
+
+   `-p`/`--progress` Choose whether to fetch organization information.
+
+   Note: You can pass mutiple values to `-r`, `-c`, `-t`, and `-v`.
+
+## Output Files
+
+The results will be saved to a file named according to the format:
+
+``results_{timestamp}.txt``
 
 
 

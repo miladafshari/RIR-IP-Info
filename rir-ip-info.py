@@ -1,152 +1,174 @@
-import subprocess
-import ipaddress
-import math
-import requests
-import json
+#!/usr/bin/env python3
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from iso3166 import countries_by_alpha2
+from sys import stderr as STREAM
 from datetime import datetime
+from io import BytesIO
 from tqdm import tqdm
+import ipaddress
+import requests
+import argparse
+import pycurl
+import math
+import re
 
-def ip_to_prefix(ip, num_addresses, ip_version):
-    if ip_version == 'ipv4':
-        bits_needed = math.ceil(math.log2(num_addresses))
-        prefix_length = 32 - bits_needed
-        network = ipaddress.IPv4Network((ip, prefix_length), strict=False)
-    else:
-        network = ipaddress.IPv6Network((ip, num_addresses), strict=False)
-    return str(network)
+rir_stat_urls = {
+    "ripe": "ftp://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-extended-latest",
+    "afrinic": "ftp://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest",
+    "apnic": "ftp://ftp.apnic.net/pub/stats/apnic/delegated-apnic-extended-latest",
+    "lacnic": "ftp://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-extended-latest",
+    "arin": "ftp://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest"
+}
 
-def fetch_organization_info(ip_prefix):
-    try:
-        url = f"https://stat.ripe.net/data/whois/data.json?resource={ip_prefix}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('data', {}).get('records', [])
-        for record in records:
+def init_argparse() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s [OPTION]",
+        description="Fetch and display IP Prefixes (IPv4, IPv6) and, organization information associated with RIR IP ranges."
+    )
+
+    parser.add_argument('-r', '--rir', type=str.lower, choices=rir_stat_urls.keys(), nargs='+', required=True)
+    parser.add_argument('-c', '--country_code', type=str.upper, choices=countries_by_alpha2.keys(), nargs='+', required=True)
+    parser.add_argument('-v', '--ip_version', type=int, choices=[4,6], nargs='*', default=[4,6])
+    parser.add_argument('-t', '--prefix_type', type=str.lower, choices=["allocated", "assigned"], nargs='+', required=True)
+    parser.add_argument('-o', '--org_info', action='store_true', required=False)
+    parser.add_argument('-p', '--progress', action='store_true', required=False, default=False)
+    return parser
+
+def prefix_len_by_num_of_ip(num_of_ip: int) -> int:
+    bits_needed = math.ceil(math.log2(num_of_ip))
+    prefix_length = 32 - bits_needed
+    return prefix_length
+
+def fetch_organization_info(prefix_notation: str) -> str:
+    url = f"https://stat.ripe.net/data/whois/data.json?resource={prefix_notation}"
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    response_json = response.json()
+    if data := response_json.get('data'):
+        for record in data['records']:
             for entry in record:
-                if entry.get('key') == 'netname':
+                if entry.get('key') == 'NetName':
                     return entry.get('value', 'Unknown organization')
-    except requests.exceptions.RequestException as e:
-        print(f"RequestException occurred: {e}")
-    except json.JSONDecodeError as e:
-        print(f"JSONDecodeError occurred while parsing response for {ip_prefix}: {e}")
-    except Exception as e:
-        print(f"Exception occurred while fetching organization info for {ip_prefix}: {e}")
-    return "Unknown organization"
+    return 'Unknown organization'
 
-def process_ip_range(line, ip_version, fetch_org_info):
-    try:
-        ip, value = line.strip().split('|')
-        if ip_version == 'ipv4':
-            num_addresses = int(value)
-            prefix_notation = ip_to_prefix(ip, num_addresses, ip_version)
-        else:
-            prefix_length = int(value)
-            prefix_notation = ip_to_prefix(ip, prefix_length, ip_version)
-        
-        if fetch_org_info:
-            org_info = fetch_organization_info(prefix_notation)
-            return (prefix_notation, org_info, num_addresses if ip_version == 'ipv4' else prefix_length)
-        else:
-            return (prefix_notation, None, num_addresses if ip_version == 'ipv4' else prefix_length)
-    except ValueError as e:
-        print(f"ValueError: {e}")
-        return None
 
-def main():
-    rirs = {
-        "ripe ncc": "ftp://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-extended-latest",
-        "afrinic": "ftp://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest",
-        "apnic": "ftp://ftp.apnic.net/pub/stats/apnic/delegated-apnic-extended-latest",
-        "lacnic": "ftp://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-extended-latest",
-        "arin": "ftp://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest"
-    }
+def process_ip_range(ip_address: str, length: int, fetch_org_info: bool) -> dict:
+    ip_version = ipaddress.ip_address(ip_address).version
 
-    # Prompt for RIR
-    rir = input("Enter the RIR (e.g., RIPE NCC, AFRINIC, APNIC, LACNIC, ARIN): ").strip().lower()
-    if rir == 'ripe':
-        rir = 'ripe ncc'
-    if rir not in rirs:
-        print("Invalid RIR.")
-        return
+    if ip_version == 4:
+        length = prefix_len_by_num_of_ip(length)
+
+    prefix_notation = ipaddress.ip_network((ip_address, length))
+
+    org_info = None
+    if fetch_org_info:
+        org_info = fetch_organization_info(prefix_notation)
+
+    return {"prefix_notation": prefix_notation,
+            "length": length,
+            "version": ip_version,
+            "org_info": org_info}
+
+def prefix_info_list_to_file(ip_info_list: list, filename: str) -> None:
+    total_ip_addresses = 0
+    with open(filename, 'w') as file:
+        for ip_info in ip_info_list:
+            line = ip_info["prefix_notation"]
+            if ip_info['org_info']:
+                line += f" | {ip_info['org_info']}"
+            
+            if ip_info['version'] == 4:
+                total_ip_addresses += 2**(32 - ip_info['length'])
+            else:
+                total_ip_addresses += 2**(128 - ip_info['length'])
+
+            file.write(f"{line}\n")
+            # Print the total number of IP addresses
+        file.write(f"Total IP addresses: {total_ip_addresses}")
+
+# callback function for c.XFERINFOFUNCTION
+def status(download_t, download_d, upload_t, upload_d) -> None:
+    # use kiB's
+    kb = 1024
+
+    STREAM.write('Downloading: {}/{} kiB ({}%)\r'.format(
+        str(int(download_d/kb)),
+        str(int(download_t/kb)),
+        str(int(download_d/download_t*100) if download_t > 0 else 0)
+    ))
+    STREAM.flush()
+
+def fetch(url: str, progress: bool = None) -> bytes:
+    b_obj = BytesIO() 
+    crl = pycurl.Curl() 
+
+    # Set URL value
+    crl.setopt(crl.URL, url)
+
+    # Write bytes that are utf-8 encoded
+    crl.setopt(crl.WRITEDATA, b_obj)
+
+    if progress:
+        # display progress
+        crl.setopt(crl.NOPROGRESS, False)
+        crl.setopt(crl.XFERINFOFUNCTION, status)
+
+    # Perform a file transfer 
+    crl.perform() 
+
+    # End curl session
+    crl.close()
+
+    # Get the content stored in the BytesIO object (in byte characters) 
+    return b_obj.getvalue()
+
+
+def main() -> None:
+    # cli arguments
+    parser = init_argparse()
+    args = parser.parse_args()
+
+    # Convert list to piped string for regex
+    country_code = ""
+    if len(args.country_code) != 1:
+        for cc in args.country_code[:-1]:
+            country_code += f"{cc}|"
+    country_code += args.country_code[-1]
+
+    ip_version = ""
+    if len(args.ip_version) != 1:
+        for version in args.ip_version[:-1]:
+            ip_version += f"{version}|"
+    ip_version += str(args.ip_version[-1])
+
+    prefix_type = ""
+    if len(args.prefix_type) != 1:
+        for type in args.prefix_type[:-1]:
+            prefix_type += f"{type}|"
+    prefix_type += args.prefix_type[-1]
     
-    # Prompt for country code
-    country_code = input("Enter the country code (e.g., IR for Iran): ").strip().upper()
-    if not country_code:
-        print("Invalid country code.")
-        return
+    regex = f"(.*?)\|({country_code})\|(ipv{ip_version})\|(.*?)\|(.*?)\|(.*?)\|({prefix_type})\|(.*?)"
 
-    # Prompt for IP prefix type
-    prefix_type = input("Enter the prefix type (Allocated/Assigned PI): ").strip().lower()
-    if prefix_type not in ["allocated", "assigned pi", "assigned"]:
-        print("Invalid prefix type.")
-        return
-    if prefix_type == "assigned pi":
-        prefix_type = "assigned"
+    records = []
+    for rir in args.rir:
+        data = fetch(rir_stat_urls[rir], progress=args.progress).decode('utf8')
+        regex_match = re.findall(regex, data)
+        records.extend(regex_match)
+    # Free memory
+    del data, regex_match
 
-    # Prompt for IP version
-    ip_version = input("Enter the IP version (IPv4/IPv6): ").strip().lower()
-    if ip_version not in ["ipv4", "ipv6"]:
-        print("Invalid IP version.")
-        return
+    results = []
+    # Use ThreadPoolExecutor to fetch data concurrently
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        futures = [executor.submit(process_ip_range, record[3], int(record[4]), args.org_info) for record in records]
+        progress_desc = f"Processing data from retrieved Database..."
+        for future in tqdm(as_completed(futures), total=len(futures), desc=progress_desc):
+            results.append(future.result())
 
-    # Prompt for fetching organization info
-    fetch_org_info = input("Do you want to fetch organization info? (yes/no): ").strip().lower()
-    if fetch_org_info not in ["yes", "no"]:
-        print("Invalid input.")
-        return
-    fetch_org_info = fetch_org_info == "yes"
-
-    # Create the curl command with the specified RIR, country code, prefix type, and IP version
-    curl_command = f"curl {rirs[rir]} | grep -i '{prefix_type}' | grep -i {country_code} | grep -i {ip_version} | cut -f4,5 -d'|'"
-    
-    try:
-        # Execute the curl command and capture the output
-        process = subprocess.Popen(curl_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-
-        if process.returncode != 0:
-            print(f"Error executing command: {stderr.decode().strip()}")
-            return
-
-        # Process the output
-        lines = stdout.decode().strip().split('\n')
-
-        total_ip_addresses = 0
-        results = []
-
-        # Use ThreadPoolExecutor to fetch data concurrently
-        with ThreadPoolExecutor(max_workers=40) as executor:
-            futures = [executor.submit(process_ip_range, line, ip_version, fetch_org_info) for line in lines]
-            progress_desc = f"Retrieving data from {rir.upper()} Database..."
-            for future in tqdm(as_completed(futures), total=len(futures), desc=progress_desc):
-                result = future.result()
-                if result:
-                    prefix_notation, org_info, num_addresses_or_prefix_length = result
-                    if fetch_org_info:
-                        results.append(f"{prefix_notation} | {org_info}")
-                    else:
-                        results.append(f"{prefix_notation}")
-                    
-                    if ip_version == 'ipv4':
-                        total_ip_addresses += num_addresses_or_prefix_length
-                    else:
-                        total_ip_addresses += 2**(128 - num_addresses_or_prefix_length)
-
-        # Print the total number of IP addresses
-        results.append(f"Total IP addresses: {total_ip_addresses}")
-
-        # Write results to a file with a timestamp, country code, prefix type, IP version, and RIR name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"results_{rir.replace(' ', '_').upper()}_{country_code}_{prefix_type.replace(' ', '_')}_{ip_version}_{timestamp}.txt"
-        with open(filename, 'w') as file:
-            file.write("\n".join(results))
-        
+        filename = f"results_{timestamp}.txt"
+        prefix_info_list_to_file(results, filename)
         print(f"Results have been written to {filename}")
-
-    except Exception as e:
-        print(f"Exception occurred: {e}")
 
 if __name__ == "__main__":
     main()
