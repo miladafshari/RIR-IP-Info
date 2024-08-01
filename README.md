@@ -55,16 +55,6 @@ The results will be saved to a file named according to the format:
 
 ``results_{timestamp}.txt``
 
+## Contributions
 
-
-
-
-
-
-
-
-
-
-
-
-
+Any PR(s) are welcomed.
