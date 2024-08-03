@@ -43,9 +43,9 @@ The script will accept the following arguments:
 
    `-v`/`--ip_version` Enter the IP version (4/6).
 
-   `-o`/`--org_info` Choose whether to fetch organization information.
+   `-o`/`--org_info` Choose whether to fetch organization(netname) information.
 
-   `-p`/`--progress` Choose whether to fetch organization information.
+   `-p`/`--progress` Choose whether to display progress bar while fetching information.
 
    Note: You can pass mutiple values to `-r`, `-c`, `-t`, and `-v`.
 
