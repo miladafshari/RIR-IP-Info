@@ -25,10 +25,18 @@ make install
 
 ## Usage
 
-1. Run the Script: Execute the Python script from the command line:
+Run the Script: Execute the Python script from the command line:
 
 ```sh
 rir-ip-info -h
+```
+
+### Example
+
+This command retrieves the allocated IPv4 and IPv6 prefixes for Iran (IR) and Oman (OM) from the RIPE NCC database, displaying their network names and status.
+
+```sh
+rir-ip-info -r ripe -c ir om -t allocated -v 4 6 -o netname status
 ```
 
 ### Help
@@ -43,11 +51,11 @@ The script will accept the following arguments:
 
    `-v`/`--ip_version` Enter the IP version (4/6).
 
-   `-o`/`--org_info` Choose whether to fetch organization(netname) information.
+   `-o`/`--org_info` Choose whether to fetch organization information (e.g., netname, status).
 
    `-p`/`--progress` Choose whether to display progress bar while fetching information.
 
-   Note: You can pass mutiple values to `-r`, `-c`, `-t`, and `-v`.
+   Note: You can pass mutiple values to `-r`, `-c`, `-t`, `-v` and `-o`.
 
 ## Output Files
 

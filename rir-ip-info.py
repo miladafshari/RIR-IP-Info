@@ -23,59 +23,102 @@ rir_stat_urls = {
 def init_argparse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPTION]",
-        description="Fetch and display IP Prefixes (IPv4, IPv6) and, organization information associated with RIR IP ranges."
+        description="Fetch and display IP Prefixes (IPv4, IPv6) and, organization information (netname, status) associated with RIR IP ranges."
     )
 
     parser.add_argument('-r', '--rir', type=str.lower, choices=rir_stat_urls.keys(), nargs='+', required=True)
     parser.add_argument('-c', '--country_code', type=str.upper, choices=countries_by_alpha2.keys(), nargs='+', required=True)
     parser.add_argument('-v', '--ip_version', type=int, choices=[4,6], nargs='*', default=[4,6])
     parser.add_argument('-t', '--prefix_type', type=str.lower, choices=["allocated", "assigned"], nargs='+', required=True)
-    parser.add_argument('-o', '--org_info', action='store_true', required=False)
+    parser.add_argument('-o', '--org_info', type=str.lower, choices=["netname", "status"], nargs='+', required=False, default=[])
     parser.add_argument('-p', '--progress', action='store_true', required=False, default=False)
     return parser
 
-def prefix_len_by_num_of_ip(num_of_ip: int) -> int:
-    bits_needed = math.ceil(math.log2(num_of_ip))
-    prefix_length = 32 - bits_needed
-    return prefix_length
+def prefix_len_by_num_of_ip(num_of_ip: int) -> list:
+    prefixes = []
+    log2 = math.log2(num_of_ip)
+    bits_needed = math.floor(log2)
+    prefixes.append(32 - bits_needed)
+    if log2 != bits_needed:
+        remainder_num_of_ip = num_of_ip - (2 ** bits_needed)
+        prefixes.extend(prefix_len_by_num_of_ip(remainder_num_of_ip))
+    return prefixes
 
-def fetch_organization_info(prefix_notation: str) -> str:
+def fetch_ripe_whois(prefix_notation: str) -> dict:
     url = f"https://stat.ripe.net/data/whois/data.json?resource={prefix_notation}"
-    response = requests.get(url, timeout=10)
+    try:
+        response = requests.get(url, timeout=10)
+    except:
+        return None
+
+    # Free unused
+    del url
     response.raise_for_status()
     response_json = response.json()
-    if data := response_json.get('data'):
-        for record in data['records']:
+
+    # Free unused
+    del response
+
+    if response_json.get('status') == "ok" and response_json.get('status_code') == 200:
+        return response_json['data']
+    return None
+
+def fetch_organization_info(prefix_notation: str, org_info: dict) -> dict:
+    info_fields = list(org_info.keys())
+    if whois := fetch_ripe_whois(prefix_notation):
+        for record in whois['records']:
             for entry in record:
-                if entry.get('key') == 'NetName':
-                    return entry.get('value', 'Unknown organization')
-    return 'Unknown organization'
+                for field in info_fields:
+                    if entry.get('key') == field:
+                        org_info[field] = entry.get('value', 'Unknown')
+                        info_fields.remove(field)
+                        break
+    return org_info
 
 
-def process_ip_range(ip_address: str, length: int, fetch_org_info: bool) -> dict:
+def process_ip_range(ip_address: str, length: int, org_info_fields: list) -> list:
     ip_version = ipaddress.ip_address(ip_address).version
 
     if ip_version == 4:
-        length = prefix_len_by_num_of_ip(length)
+        length_list = prefix_len_by_num_of_ip(length)
+    else:
+        length_list = [length]
 
-    prefix_notation = ipaddress.ip_network((ip_address, length))
+    json_list = []
+    next_ip = curr_ip = ipaddress.ip_address(ip_address)
+    for len in length_list:
 
-    org_info = None
-    if fetch_org_info:
-        org_info = fetch_organization_info(prefix_notation)
+        if ip_version == 4:
+            num_of_ip = 2 ** (32 - len)
+            curr_ip = next_ip
+            next_ip = ipaddress.ip_address(next_ip) + num_of_ip
 
-    return {"prefix_notation": prefix_notation,
-            "length": length,
-            "version": ip_version,
-            "org_info": org_info}
+        prefix_notation = ipaddress.ip_network((curr_ip, len), strict=False)
 
-def prefix_info_list_to_file(ip_info_list: list, filename: str) -> None:
+        org_info = dict()
+        for key in org_info_fields:
+            org_info[key] = None
+
+        if org_info_fields:
+            org_info = fetch_organization_info(str(prefix_notation), org_info)
+
+        json = {
+            "prefix_notation": prefix_notation,
+            "length": len,
+            "version": ip_version
+        }
+        json.update(org_info)
+        json_list.append(json)
+    
+    return json_list
+
+def prefix_info_list_to_file(ip_info_list: list, org_info_fields: list, filename: str) -> None:
     total_ip_addresses = 0
     with open(filename, 'w') as file:
         for ip_info in ip_info_list:
-            line = ip_info["prefix_notation"]
-            if ip_info['org_info']:
-                line += f" | {ip_info['org_info']}"
+            line = str(ip_info["prefix_notation"])
+            for field in org_info_fields:
+                line += f" | {ip_info[field]}"
             
             if ip_info['version'] == 4:
                 total_ip_addresses += 2**(32 - ip_info['length'])
@@ -163,11 +206,11 @@ def main() -> None:
         futures = [executor.submit(process_ip_range, record[3], int(record[4]), args.org_info) for record in records]
         progress_desc = f"Processing data from retrieved Database..."
         for future in tqdm(as_completed(futures), total=len(futures), desc=progress_desc):
-            results.append(future.result())
+            results.extend(future.result())
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"results_{timestamp}.txt"
-        prefix_info_list_to_file(results, filename)
+        prefix_info_list_to_file(results, args.org_info, filename)
         print(f"Results have been written to {filename}")
 
 if __name__ == "__main__":
